@@ -32,6 +32,25 @@ const initializeDatabase = async () => {
     return pool
 }
 
+// Authenticate User
+const authenticateUser = (req,res,next) => {
+    const accessToken = req.cookies.access_token    
+
+    if(accessToken == null){
+        return res.status(401).json({
+            message: 'Unauthorized, no token available'
+        })
+    }
+
+    const token = accessToken.split(' ')[1]
+    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+        if (err) res.status(403).json({message: 'Token Invalid'});
+        req.user = user
+        next()
+    })
+
+}
+
 
 // run server
 initializeDatabase().then(pool => {
@@ -91,25 +110,12 @@ app.post('/api/user/register', async(req,res) => {
     }
 })
 
-app.get('/api/auth/me', async(req, res) => {
+app.get('/api/auth/me', authenticateUser, (req, res) => {
     try{
-        const accessToken = req.cookies.access_token
-        const token = accessToken.split(' ')[1]
-
-        if(token == null){
-            res.status(401).json({
-                message: 'Unauthorized, no token available'
-            })
-        }
-
-        jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-            if (err) res.status(403).json({message: 'Token Invalid'});
-            res.status(200).json({
-                message: 'User authenticated',
-                data: user
-            })
+        res.status(200).json({
+            message: 'User authenticated',
+            data: req.user
         })
-
     }catch(err){
         console.error(err)
         res.status(500).json({
@@ -149,6 +155,42 @@ app.post('/api/auth/login', async(req,res) => {
 
     }catch(err){
         console.error('Error logging in user: ', err)
+        res.status(500).json({
+            message: "Internal Server Error"
+        })
+    }
+})
+
+app.post('/api/user/update/:id', authenticateUser, async(req,res) => {    
+    try{
+        const {id} = req.params
+        const {name, email, password} = req.body
+        const pool = app.get('pool')
+
+        const getUserInfo = await pool.query("SELECT * FROM users where id = $1", [id])
+        const result = getUserInfo.rows[0]
+
+        if(result){
+            const hashedPassword = await bcrypt.hash(password, 10)
+            const updateInfo = await pool.query("UPDATE users SET name = $1, email = $2, password = $3 RETURNING *",
+                [name, email, hashedPassword]
+            )            
+                                    
+            const newData = updateInfo.rows[0]
+            res.status(200).json({
+                message: "User updated successfully !",
+                data: {
+                    name: newData.name,
+                    email: newData.email
+                }
+            })
+        }else{
+            res.status(404).json({
+                message: 'User not found'
+            })
+        }
+    }catch(err){
+        console.error(err)
         res.status(500).json({
             message: "Internal Server Error"
         })
