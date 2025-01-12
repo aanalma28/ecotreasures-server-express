@@ -4,6 +4,7 @@ const pg = require('pg')
 const { Pool } = pg
 const bcrypt = require('bcrypt')
 const jwt = require('jsonwebtoken')
+const cookieParser = require('cookie-parser')
 const express = require('express')
 const app = express()
 const port = 3000
@@ -46,6 +47,7 @@ initializeDatabase().then(pool => {
 
 // Middleware untuk parsing JSON
 app.use(express.json());
+app.use(cookieParser())
 
 app.get('/', (req,res) => {
     res.send("Hallo dunia")
@@ -89,6 +91,33 @@ app.post('/api/user/register', async(req,res) => {
     }
 })
 
+app.get('/api/auth/me', async(req, res) => {
+    try{
+        const accessToken = req.cookies.access_token
+        const token = accessToken.split(' ')[1]
+
+        if(token == null){
+            res.status(401).json({
+                message: 'Unauthorized, no token available'
+            })
+        }
+
+        jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+            if (err) res.status(403).json({message: 'Token Invalid'});
+            res.status(200).json({
+                message: 'User authenticated',
+                data: user
+            })
+        })
+
+    }catch(err){
+        console.error(err)
+        res.status(500).json({
+            message: "Internal Server Error"
+        })
+    }
+})
+
 app.post('/api/auth/login', async(req,res) => {
     try{
         const {email, password} = req.body
@@ -104,11 +133,13 @@ app.post('/api/auth/login', async(req,res) => {
                 expiresIn: '14d'
             })
 
-            res.status(200).json({
+            res.status(200).cookie('access_token', 'Bearer ' + token, {
+                expires: new Date(Date.now() + 336 * 3600000),
+                httpOnly: true,                
+            }).json({
                 message: "Login Successfully !",
                 username: result.name,
-                email: result.email,
-                token: token                
+                email: result.email,                        
             })
         }else{
             res.status(401).json({
