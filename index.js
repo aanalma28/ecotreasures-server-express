@@ -196,3 +196,110 @@ app.post('/api/user/update/:id', authenticateUser, async(req,res) => {
         })
     }
 })
+
+app.post('/api/auth/logout', (req,res) => {
+    res.clearCookie('access_token', {
+        httpOnly: true, // allow request with http, avoid XSS attack        
+    })
+
+    res.status(200).json({
+        message: 'Logout Successfull'
+    })
+})
+
+
+
+
+// Product action
+app.post('/api/products/create', authenticateUser, async(req,res) => {
+    try{
+        const { category_id, title, image, price, stock, detail, active } = req.body
+        const user_id = req.user.id
+
+        const pool = app.get('pool')
+        const id = Math.floor(Math.random() * 1000) + 1
+        const createProduct = await pool.query(
+            "INSERT INTO products (id,user_id,category_id,title,image,price,stock,detail,active) "+
+            "values ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *",
+            [id,user_id,category_id,title,image,price,stock,detail,active]
+        )
+
+        const result = createProduct.rows[0]
+
+        if(result){
+            res.status(201).json({
+                message: 'Product created successfully',
+                data: {
+                    title,price,stock,detail,active
+                }
+            })
+        }        
+    }catch(err){
+        console.error(err)
+        res.status(500).json({
+            message: "Internal Server Error"
+        })
+    }
+})
+
+app.post('/api/products/update/:id', async(req,res) => {
+    try{
+        const id = req.params.id
+        const {category_id,title,image,price,stock,detail} = req.body
+
+        const pool = app.get('pool')
+        const updateProduct = await pool.query(
+            "UPDATE products set category_id=$1, title=$2, image=$3, price=$4, stock=$5, detail=$6 RETURNING *",
+            [category_id,title,image,price,stock,detail]
+        )
+
+        const result = updateProduct.rows[0]
+        if(result){
+            res.status(200).json({
+                message: 'Product updated successfully',
+                data: {
+                    category_id,title,image,price,stock,detail
+                }
+            })
+        }
+    }catch(err){
+        console.error(err)
+        res.status(500).json({
+            message: "Internal Server Error"
+        })
+    }
+})
+
+app.get('/api/products/seller', authenticateUser, async(req,res) => {
+    try{
+        const user_id = req.user.id
+        const pool = app.get('pool')
+        const products = await pool.query("SELECT * FROM products WHERE user_id=$1", [user])
+        res.status(200).json({
+            message: 'Products retrieved successfully',
+            data: products.rows
+        })
+    }catch(err){
+        console.error(err)
+        res.status(500).json({
+            message: "Internal Server Error"
+        })
+    }
+})
+
+app.get('/api/products/all', async(req,res) => {
+    try{
+        const pool = app.get('pool')
+        const getAllProducts = await pool.query("SELECT * FROM products")
+        const products = getAllProducts.rows
+        res.status(200).json({
+            message: 'All products retrieved successfully',
+            data: products
+        })
+    }catch(err){
+        console.error(err)
+        res.status(500).json({
+            message: "Internal Server Error"
+        })
+    }
+})
